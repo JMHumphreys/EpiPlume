@@ -1,6 +1,8 @@
 `%||%` <- function(x, y) if (is.null(x) || !length(x) || is.na(x[1])) y else x[1]
 
 manifest_repository_commit <- function() {
+  override <- Sys.getenv("EPIPLUME_REPOSITORY_COMMIT", unset = "")
+  if (grepl("^[0-9a-f]{40}$", override)) return(override)
   x <- suppressWarnings(tryCatch(system2("git", c("rev-parse", "HEAD"), stdout = TRUE, stderr = FALSE), error = function(e) character()))
   if (length(x) == 1L && grepl("^[0-9a-f]{40}$", x)) x else NA_character_
 }

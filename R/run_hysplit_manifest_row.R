@@ -1,5 +1,6 @@
 #' Execute or dry-run exactly one HYSPLIT manifest row
-run_hysplit_manifest_row <- function(manifest_row, cfg, dry_run = TRUE, overwrite = FALSE, core_fun = NULL) {
+run_hysplit_manifest_row <- function(manifest_row, cfg, dry_run = TRUE, overwrite = FALSE,
+    core_fun = NULL, refresh_run_index = TRUE) {
   row <- validate_hysplit_manifest_row(manifest_row)
   installation <- resolve_hysplit_installation(cfg, must_exist = !isTRUE(dry_run))
   meteorology <- resolve_hysplit_meteorology(row, cfg, must_exist = !isTRUE(dry_run))
@@ -54,6 +55,6 @@ run_hysplit_manifest_row <- function(manifest_row, cfg, dry_run = TRUE, overwrit
     metadata$actual_output_files <- setdiff(metadata$actual_output_files, normalizePath(json_path, winslash = "/", mustWork = FALSE))
   }
   saveRDS(metadata, rds_path)
-  write_completed_run_index(cfg$hysplit$run_root_directory)
+  if (isTRUE(refresh_run_index)) write_completed_run_index(cfg$hysplit$run_root_directory)
   metadata
 }
