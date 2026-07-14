@@ -99,7 +99,7 @@ osf_project_demo$name # scratch directory on OSF EpiPlume project
 ```
   
 ## Read Configuration Parameters  
-Parameters for epidemiological and spatial analyses are recorded in configuration files.  Loading the demonstration config file, which can be viewed here: [Demo Configuration Parameters](https://github.com/geoepi/EpiPlume/blob/main/config/demo_2025-04-21.yaml).
+Parameters for epidemiological and spatial analyses are recorded in configuration files.  Loading the demonstration config file, which can be viewed here: [Demo Configuration Parameters](https://github.com/JMHumphreys/EpiPlume/blob/main/config/demo_2025-04-21.yaml).
 ```{r}
 cfg <- yaml::read_yaml(here("config", "demo_2025-04-21.yaml"))
 
@@ -159,7 +159,7 @@ sim_dates
 ```
 
 ### SEIR and Emission Estimates
-Run SEIR model for source farm.  There are a ton of parameter assumptions here to discuss.  Brief explanations are provided with the [config file (linked here)](https://github.com/geoepi/EpiPlume/blob/main/config/demo_2025-04-21.yaml), but far too much to include in this draft workflow.    
+Run SEIR model for source farm.  There are a ton of parameter assumptions here to discuss.  Brief explanations are provided with the [config file (linked here)](https://github.com/JMHumphreys/EpiPlume/blob/main/config/demo_2025-04-21.yaml), but far too much to include in this draft workflow.
 ```{r}
 # virus decay, rate of decreasing viability
 halflife <- calculate_half_life(viability_days = cfg$virus$viability_hours/24, # convert hours to days
@@ -211,7 +211,7 @@ simulated_realease_dt <- ymd_hm(paste0(sim_dates$release_date, " ", sprintf("%02
 ```
 
 ### Run plume model
-The *wrap_plume_model()* function saves the plume model locally, however, a copy is also saved to OSF. There are a ton of parameter assumptions here to discuss.  Brief explanations are provided with the [config file (linked here)](https://github.com/geoepi/EpiPlume/blob/main/config/demo_2025-04-21.yaml), but its too much for this draft workflow.    
+The *wrap_plume_model()* function saves the plume model locally, however, a copy is also saved to OSF. There are a ton of parameter assumptions here to discuss.  Brief explanations are provided with the [config file (linked here)](https://github.com/JMHumphreys/EpiPlume/blob/main/config/demo_2025-04-21.yaml), but its too much for this draft workflow.
 ```{r eval=FALSE}
 plume_model <- wrap_plume_model(cfg, # configuration file
                                 plume_name = "sim_demo", # name/label
@@ -468,7 +468,7 @@ joint.stack <- inla.stack(j.dens.stk, j.conc.stk)
 
 
 ## Run Joint Spatiotemporal Model  
-The *run_joint_spatiotemporal()* is a wrapper function to facilitate model fitting with [r-INLA](https://www.r-inla.org/). The model formula and execution can be viewed here: [**Model Details**](https://github.com/geoepi/EpiPlume/blob/main/R/run_joint_spatiotemporal.R)
+The *run_joint_spatiotemporal()* is a wrapper function to facilitate model fitting with [r-INLA](https://www.r-inla.org/). The model formula and execution can be viewed here: [**Model Details**](https://github.com/JMHumphreys/EpiPlume/blob/main/R/run_joint_spatiotemporal.R)
 ```{r eval=FALSE}
 bin_gamma_model <- run_joint_spatiotemporal(field.sp.1 = sp_indices_dens$field.sp.1,
                                             field.sp.2 = sp_indices_dens$field.sp.2,

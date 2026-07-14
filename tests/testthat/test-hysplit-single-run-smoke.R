@@ -62,5 +62,7 @@ testthat::test_that("ordinary targets graph remains non-executing and execution 
   testthat::expect_false(grepl("run_selected_hysplit_case|run_hysplit_manifest_row", ordinary))
   testthat::expect_true(grepl("EPIPLUME_RUN_IDS", execution, fixed = TRUE))
   testthat::expect_true(grepl("EPIPLUME_ALLOW_HYSPLIT_EXECUTION", execution, fixed = TRUE))
-  ignore <- readLines(file.path(repo_root, ".gitignore")); testthat::expect_true(any(grepl("local/**/meteorology", ignore, fixed = TRUE))); testthat::expect_true(any(grepl("local/**/RP", ignore, fixed = TRUE)))
+  ignore <- readLines(file.path(repo_root, ".gitignore"))
+  testthat::expect_true(any(ignore == "/local"))
+  testthat::expect_false(any(grepl("local/**/", ignore, fixed = TRUE)))
 })

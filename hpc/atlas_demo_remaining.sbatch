@@ -1,23 +1,23 @@
 #!/bin/bash
 #SBATCH --job-name=epiplume_demo7
-#SBATCH --account=hpai_plume
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=02:00:00
-#SBATCH --output=local/facility_exchange_demo/logs/demo7_%j.out
-#SBATCH --error=local/facility_exchange_demo/logs/demo7_%j.err
 set -euo pipefail
-REPO_DIR="${REPO_DIR:-/project/hpai_plume/EpiPlume}"
+[[ -n "${REPO_DIR:-}" ]] || { echo "REPO_DIR was not exported by the submitter." >&2; exit 2; }
+# shellcheck source=hpc/lib/load_atlas_environment.sh
+source "${REPO_DIR}/hpc/lib/load_atlas_environment.sh"
 RUN_WORKERS="${RUN_WORKERS:-4}"
 EXPECTED_REMAINING="${EXPECTED_REMAINING:-7}"
 if [[ "${RUN_WORKERS}" -lt 2 || "${RUN_WORKERS}" -gt 4 ]]; then echo "RUN_WORKERS must be between 2 and 4." >&2; exit 2; fi
 cd "${REPO_DIR}"
 CONFIG="config/facility_exchange_demo.yml"
 MANIFEST="local/facility_exchange_demo/manifests/hysplit_run_manifest.csv"
-LOG_DIR="local/facility_exchange_demo/logs"
-STATUS_DIR="local/facility_exchange_demo/atlas_demo7"
+ROOT="$(Rscript -e "source('R/read_facility_exchange_config.R'); cat(read_facility_exchange_config('${CONFIG}')\$outputs\$root_directory)")"
+LOG_DIR="${ROOT}/logs"
+STATUS_DIR="${ROOT}/atlas_demo7"
 mkdir -p "${LOG_DIR}" "${STATUS_DIR}"
 echo "EpiPlume Atlas demonstration completion"
 echo "job_id=${SLURM_JOB_ID:-none}"

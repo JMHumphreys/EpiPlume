@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=hysplit_diag
-#SBATCH --account=hpai_plume
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
@@ -11,8 +10,11 @@
 
 set -euo pipefail
 
-REPO="/project/hpai_plume/EpiPlume"
-BINARY="/home/john.humphreys/R/x86_64-pc-linux-gnu-library/4.5/splitr/linux-amd64/hycs_std"
+REPO_DIR="${REPO_DIR:-${EPIPLUME_REPO_DIR:-/project/hpai_plume/EpiPlume}}"
+# shellcheck source=hpc/lib/load_atlas_environment.sh
+source "${REPO_DIR}/hpc/lib/load_atlas_environment.sh"
+REPO="${REPO_DIR}"
+BINARY="${HYSPLIT_INSTALL_DIRECTORY}/hycs_std"
 RUN_ID="F001__20200501T000000Z"
 WORK_DIR="${REPO}/local/facility_exchange_array_test/hysplit/${RUN_ID}/splitr_work"
 

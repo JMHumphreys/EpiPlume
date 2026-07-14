@@ -939,4 +939,4 @@ ggsave(
 </details>
 
 ![Smoothed
-Plume](https://github.com/geoepi/EpiPlume/blob/main/assets/plume_density.png)
+Plume](https://github.com/JMHumphreys/EpiPlume/blob/main/assets/plume_density.png)

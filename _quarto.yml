@@ -30,7 +30,7 @@ website:
  #     - href: https://geoepi.github.io/
   #      text: GeoEpi
       - icon: github
-        href: https://github.com/geoepi/EpiPlume
+        href: https://github.com/JMHumphreys/EpiPlume
   page-footer:
     right: "Built with [Quarto](https://quarto.org/)"
 

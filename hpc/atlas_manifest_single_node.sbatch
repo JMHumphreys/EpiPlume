@@ -1,17 +1,16 @@
 #!/bin/bash
 #SBATCH --job-name=epiplume_manifest
-#SBATCH --account=hpai_plume
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=04:00:00
-#SBATCH --output=local/facility_exchange_demo/logs/manifest_%j.out
-#SBATCH --error=local/facility_exchange_demo/logs/manifest_%j.err
 
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/project/hpai_plume/EpiPlume}"
+[[ -n "${REPO_DIR:-}" ]] || { echo "REPO_DIR was not exported by the submitter." >&2; exit 2; }
+# shellcheck source=hpc/lib/load_atlas_environment.sh
+source "${REPO_DIR}/hpc/lib/load_atlas_environment.sh"
 CONFIG="${CONFIG:-config/facility_exchange_demo.yml}"
 MANIFEST="${MANIFEST:-local/facility_exchange_demo/manifests/hysplit_run_manifest.csv}"
 WORKERS="${WORKERS:-4}"
@@ -19,8 +18,9 @@ ALLOW_RETRY_FAILED="${ALLOW_RETRY_FAILED:-false}"
 
 cd "${REPO_DIR}"
 
-STATE_DIR="local/facility_exchange_demo/atlas_slurm_state"
-mkdir -p local/facility_exchange_demo/logs "${STATE_DIR}"
+ROOT="$(Rscript -e "source('R/read_facility_exchange_config.R'); cat(read_facility_exchange_config('${CONFIG}')\$outputs\$root_directory)")"
+STATE_DIR="${ROOT}/atlas_slurm_state"
+mkdir -p "${ROOT}/logs" "${STATE_DIR}"
 
 echo "job_id=${SLURM_JOB_ID:-none}"
 echo "host=$(hostname)"

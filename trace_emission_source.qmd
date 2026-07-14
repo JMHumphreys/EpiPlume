@@ -101,7 +101,7 @@ osf_project_demo$name # scratch directory on OSF EpiPlume project
 ```
   
 ## Read Configuration Parameters  
-Parameters for epidemiological and spatial analyses are recorded in configuration files.  Loading the demonstration config file, which can be viewed here: [Demo Configuration Parameters](https://github.com/geoepi/EpiPlume/blob/main/config/demo_2025-04-21.yaml).
+Parameters for epidemiological and spatial analyses are recorded in configuration files.  Loading the demonstration config file, which can be viewed here: [Demo Configuration Parameters](https://github.com/JMHumphreys/EpiPlume/blob/main/config/demo_2025-04-21.yaml).
 ```{r}
 cfg <- yaml::read_yaml(here("config", "demo_2025-04-21.yaml"))
 ```
@@ -189,7 +189,7 @@ length(dates_to_check) # total days to model
 ```
 
 ### Run Trajectory Model  
-The *wrap_trajectory_model()* saves locally, but a copy is also saved to OSF for others to use. There are a ton of parameter assumptions here to discuss.  Brief explanations are provided with the [config file (linked here)](https://github.com/geoepi/EpiPlume/blob/main/config/demo_2025-04-21.yaml), but its too much for this draft workflow.  
+The *wrap_trajectory_model()* saves locally, but a copy is also saved to OSF for others to use. There are a ton of parameter assumptions here to discuss.  Brief explanations are provided with the [config file (linked here)](https://github.com/JMHumphreys/EpiPlume/blob/main/config/demo_2025-04-21.yaml), but its too much for this draft workflow.
    
 This model estimates four trajectories per day (every 6 hours) for each of the `r length(dates_to_check)` days, for a a total of `r 4*length(dates_to_check)` trajectories.  
 ```{r eval=FALSE}

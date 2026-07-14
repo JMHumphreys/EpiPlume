@@ -52,26 +52,16 @@ secrets.yaml
 
 # local data
 /local
-# HYSPLIT meteorological caches and smoke-test products
-local/**/meteorology/
-local/**/climate/
-local/**/met/
-local/**/hysplit/
-local/**/targets/
-local/**/pipeline_status/
-local/**/rasters/
-local/**/exposures/
-local/**/reports/
-local/**/manifests/
-local/**/*.arl
-local/**/*.ARL
-local/**/*.bin
-local/**/RP*
-local/**/gdas*
-local/**/narr*
-local/**/hysplit.*
-local/**/CONTROL
-local/**/SETUP.CFG
+/EpiPlume_local
+/software/
+/MESSAGE
+/STARTUP
+/VMSDIST
+/WARNING
+/tests/testthat/local/
+
+# Atlas machine-specific environment
+/config/atlas.env
 
 # quarto
 /.quarto/
@@ -81,6 +71,4 @@ local/**/SETUP.CFG
 /renv/python/
 /renv/cache/
 renv/staging/
-
-
 

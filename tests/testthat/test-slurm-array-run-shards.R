@@ -177,4 +177,7 @@ testthat::test_that("array scripts preserve ownership boundaries", {
   testthat::expect_false(any(grepl("update_manifest_execution_ledger|tar_make|prepare_hysplit_manifest_meteorology", c(worker, task, batch))))
   testthat::expect_true(any(grepl("run_facility_exchange_pipeline", collector)))
   testthat::expect_true(any(grepl("afterany", readLines(file.path(repo_root, "hpc", "submit_atlas_hysplit_array.sh")))))
+  testthat::expect_true(any(grepl("load_atlas_environment.sh", batch, fixed = TRUE)))
+  testthat::expect_true(any(grepl("EPIPLUME_SKIP_HYSPLIT_PREFLIGHT=true", collector, fixed = TRUE)))
+  testthat::expect_false(any(grepl("run_hysplit_slurm_array_task", collector, fixed = TRUE)))
 })

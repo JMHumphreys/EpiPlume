@@ -1,64 +1,129 @@
 # Atlas SLURM-array HYSPLIT execution
 
-This workflow distributes a prepared HYSPLIT manifest across a SLURM array without allowing concurrent tasks to modify shared scenario state. It supplements, and does not replace, the validated single-node workflow.
+GitHub repository [`JMHumphreys/EpiPlume`](https://github.com/JMHumphreys/EpiPlume) is the authoritative source for Atlas code. Commit and push changes from the development checkout, then pull committed changes on Atlas. Do not manually patch tracked scripts on Atlas.
+
+## Atlas environment
+
+Create the ignored, machine-specific configuration once:
+
+```bash
+cd /project/hpai_plume/EpiPlume
+cp config/atlas.env.example config/atlas.env
+${EDITOR:-vi} config/atlas.env
+```
+
+The file must define:
+
+- `EPIPLUME_REPO_DIR`: Atlas checkout directory.
+- `EPIPLUME_R_LIBS_USER`: personal R 4.5 library containing `splitr`.
+- `EPIPLUME_HYSPLIT_INSTALL_DIRECTORY`: directory containing native `hycs_std` and `parhplot`.
+- `EPIPLUME_SLURM_ACCOUNT`: allocation passed to `sbatch`.
+- `EPIPLUME_GCC_MODULE`: Atlas GCC module.
+- `EPIPLUME_R_MODULE`: Atlas R module.
+
+Set `EPIPLUME_ATLAS_ENV_FILE` to use a different environment file. Values already exported as `EPIPLUME_*` override file values. The shared loader deliberately unsets inherited `R_LIBS` and replaces any unrelated inherited `R_LIBS_USER` with `EPIPLUME_R_LIBS_USER`; this prevents another project's library, such as an inherited login environment, from hiding the EpiPlume `splitr` installation.
+
+The loader purges and loads GCC, udunits, GDAL, PROJ, GEOS, Git, and R. It verifies that R can load `splitr`. Execution scripts also verify that `hycs_std` and `parhplot` exist, are executable Linux ELF binaries, and have no unresolved shared libraries. The collector loads the same module and R library environment but skips HYSPLIT binary preflight because it does not execute HYSPLIT.
+
+Use a native RHEL 9 HYSPLIT build. The repository convention is:
+
+```text
+/project/hpai_plume/EpiPlume/software/hysplit-atlas/exec/hycs_std
+/project/hpai_plume/EpiPlume/software/hysplit-atlas/exec/parhplot
+```
+
+Windows `.exe` binaries and binaries copied from incompatible Linux distributions are not valid Atlas installations.
 
 ## Architecture and ownership
 
-The submission command verifies the full manifest's shared meteorology with downloads disabled, classifies durable run state, and writes an immutable array map. Each selected map row becomes one SLURM task. A task acquires only that run's `.execution.lock`, works only in that run directory, and atomically replaces only its own JSON/RDS status shard.
+The submitter verifies shared meteorology with downloads disabled, classifies durable run state, and writes an immutable array map. Each selected map row becomes one SLURM task. A worker acquires only that run's `.execution.lock`, modifies only its run directory, and atomically replaces only its own JSON/RDS status shard.
 
-Array workers never write `manifest_execution_ledger.*`, `completed_run_index.*`, the targets store, or meteorology. They never invoke the ordinary targets pipeline. This single-writer rule prevents lost ledger updates and incomplete target snapshots when tasks finish concurrently.
+Workers never write `manifest_execution_ledger.*`, `completed_run_index.*`, the targets store, or meteorology. The collector is submitted with `afterany:<array_job_id>`, so task failure cannot suppress collection. It validates shards and durable products, merges shared state once, refreshes the completed-run index, runs the ordinary pipeline twice, and verifies final state.
 
-The collector is submitted with `afterany:<array_job_id>`, so partial task failure cannot suppress collection. It validates every shard against its immutable map row and durable run products, writes collection diagnostics, merges the shared ledger once, refreshes the completed-run index, runs the ordinary pipeline twice, and verifies the final state.
+Maps, shards, logs, and collection products all live beneath the configured scenario output root:
 
-## Immutable maps and submission identity
+```text
+<root>/slurm_array/maps/
+<root>/slurm_array/shards/<submission_id>/
+<root>/slurm_array/logs/
+<root>/slurm_array/collections/<submission_id>/
+```
 
-Maps are stored under `local/<scenario>/slurm_array/maps/` in CSV and RDS formats. Rows retain manifest order and have consecutive one-based `array_index` values. A submission ID contains the scenario, UTC creation time, short Git SHA, and a hash of the map, for example `facility_exchange_demo__20260713T180000Z__1a90b4e__a81c29ff`. Existing map files are never overwritten.
-
-Selected durable states map to actions as follows:
+Submission IDs contain the scenario, UTC creation time, short Git SHA, and map hash. Existing maps are never overwritten.
 
 | Durable state | Action | Authorization |
 |---|---|---|
 | `planned`, `ready` | `execute` | execution flag and environment variable |
-| `execution_failed` | `retry_execution` | `--retry-failed` plus `EPIPLUME_ALLOW_FAILED_RETRY=true` |
-| `parse_failed`, `receptor_failed` | `resume_postprocessing` | `--include-postprocessing`; HYSPLIT is not executed |
+| `execution_failed` | `retry_execution` | `--retry-failed` and `EPIPLUME_ALLOW_FAILED_RETRY=true` |
+| `parse_failed`, `receptor_failed` | `resume_postprocessing` | `--include-postprocessing`; no HYSPLIT execution |
 | `completed` | excluded | none |
 
 `running`, `invalid`, and `meteorology_blocked` stop map creation. Duplicate manifest or selected run IDs also stop submission.
 
-## Status shards
+## Pull committed changes on Atlas
 
-Each task owns `slurm_array/shards/<submission_id>/<run_id>.json` and `.rds`. It writes a starting shard after acquiring the run lock, then replaces the shard after execution validation, parsing, receptor extraction, and finalization. Failed final shards are retained with a nonzero `task_exit_status` and an `error_message`.
+First confirm that Atlas has no uncommitted tracked edits, then align it with GitHub:
 
-The schema records submission/job/task identity, run/action identity, host and process, repository commit, timestamps and elapsed time, pre/post state, whether HYSPLIT was attempted, attempt counts, durable product paths, objective validation results, dispersion row count, warnings, and error/exit status.
+```bash
+cd /project/hpai_plume/EpiPlume
+git status --short
+git fetch origin
+git switch feature/slurm-array-run-shards
+git reset --hard origin/feature/slurm-array-run-shards
+```
 
-## Submit and monitor
+The hard reset is intentional only for the clean Atlas code checkout: GitHub is authoritative. Ignored scenario products remain in place.
 
-From the Atlas repository checkout:
+## One-run dry test and execution
+
+Choose one inspected `planned` or `ready` run. The dry run performs environment and HYSPLIT preflight, verifies meteorology, writes the immutable map, and prints both `sbatch` commands without submitting:
 
 ```bash
 ./hpc/submit_atlas_hysplit_array.sh \
   --config config/facility_exchange_demo.yml \
   --manifest local/facility_exchange_demo/manifests/hysplit_run_manifest.csv \
-  --max-concurrent 10
+  --run-ids INSPECTED_RUN_ID \
+  --max-concurrent 1 \
+  --dry-run
 ```
 
-The default concurrency cap is 10. Reduce it when filesystem or scheduler load warrants. Use `--dry-run` to verify meteorology, create and summarize the map, and print the `sbatch` command without submitting jobs. The submission output prints `squeue`, `sacct`, and log-tail commands.
+Review the map summary and printed paths. Then submit only that same task:
 
-To include postprocessing recovery, add `--include-postprocessing`. To retry inspected execution failures in a new submission and preserve the previous shards:
+```bash
+./hpc/submit_atlas_hysplit_array.sh \
+  --config config/facility_exchange_demo.yml \
+  --manifest local/facility_exchange_demo/manifests/hysplit_run_manifest.csv \
+  --run-ids INSPECTED_RUN_ID \
+  --max-concurrent 1
+```
+
+Do not start a four-run retry until this task and its collector have been reviewed.
+
+For one previously failed run, inspect its shard, logs, run metadata, and execution lock first. A deliberate retry requires both safeguards:
 
 ```bash
 EPIPLUME_ALLOW_FAILED_RETRY=true ./hpc/submit_atlas_hysplit_array.sh \
   --config config/facility_exchange_demo.yml \
   --manifest local/facility_exchange_demo/manifests/hysplit_run_manifest.csv \
-  --retry-failed --run-ids ID1,ID2
+  --run-ids INSPECTED_FAILED_RUN_ID \
+  --retry-failed \
+  --max-concurrent 1 \
+  --dry-run
 ```
 
-## Collection and failure recovery
+Remove `--dry-run` only after reviewing its output.
 
-Collection reports are written beneath `slurm_array/collections/<submission_id>/`. Missing shards, unexpected runs, identity/commit/task mismatches, incomplete starting shards, invalid completed claims, absent parse/receptor products, and failures without diagnostics are recorded deterministically. A collector rerun is idempotent: attempt counts are not lowered and an older failed result cannot replace a valid completed ledger row.
+## Monitor and recover
 
-The collector returns nonzero if any mapped task failed or any shard is missing or invalid. Its ordinary pipeline and verification steps still run after shard collection so durable successes remain usable. Correct the underlying failure, submit only affected run IDs as a new submission, and collect again; prior maps, shards, logs, and collection reports remain intact.
+The submitter prints the array and collector job IDs. Inspect both together:
 
-## Atlas integration test
+```bash
+squeue -j ARRAY_JOB_ID,COLLECTOR_JOB_ID
+sacct -j ARRAY_JOB_ID,COLLECTOR_JOB_ID --format=JobID,State,Elapsed,MaxRSS,ExitCode
+tail -f <scenario-root>/slurm_array/logs/ARRAY_JOB_ID_*.out
+tail -f <scenario-root>/slurm_array/logs/collect_COLLECTOR_JOB_ID.out
+```
 
-Before merging, use a fresh four-run simulated scenario or copied fixture products rather than the already-completed 12-run demonstration. Submit with `--max-concurrent 2`, induce one controlled task failure, and confirm four distinct task logs/shards and no ledger modification before collection. Confirm the first collector records three successes and one failure, retry only the failed run in a new submission, then confirm all four complete. Finally run the ordinary pipeline twice and require `targets::tar_outdated()` to return no targets.
+The submitted-job record is written to `<scenario-root>/slurm_array/collections/<submission_id>_submitted_jobs.txt`. Collection diagnostics are under `<scenario-root>/slurm_array/collections/<submission_id>/`.
+
+The collector returns nonzero for failed, missing, or invalid shards, while retaining valid durable results. Preserve all failed historical submissions, maps, shards, logs, and collection reports. Correct the cause and create a new submission for only the inspected affected run; never overwrite or delete the earlier evidence.
