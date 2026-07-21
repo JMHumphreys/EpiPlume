@@ -180,4 +180,61 @@ testthat::test_that("array scripts preserve ownership boundaries", {
   testthat::expect_true(any(grepl("load_atlas_environment.sh", batch, fixed = TRUE)))
   testthat::expect_true(any(grepl("EPIPLUME_SKIP_HYSPLIT_PREFLIGHT=true", collector, fixed = TRUE)))
   testthat::expect_false(any(grepl("run_hysplit_slurm_array_task", collector, fixed = TRUE)))
+  testthat::expect_true(any(grepl("EPIPLUME_STRICT_MANIFEST_VERIFICATION", collector, fixed = TRUE)))
+  testthat::expect_true(any(grepl("whole-manifest verification is incomplete", collector, fixed = TRUE)))
+  testthat::expect_false(any(grepl("verify_manifest_pipeline_completion.*\\|\\| STATUS=", collector)))
+})
+
+slurm_bash_path <- function(path) {
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  if (grepl("^[A-Za-z]:/", path)) {
+    path <- paste0("/", tolower(substr(path, 1L, 1L)), substr(path, 3L, nchar(path)))
+  }
+  path
+}
+
+slurm_bash_literal <- function(path) {
+  paste0("'", gsub("'", "'\"'\"'", slurm_bash_path(path), fixed = TRUE), "'")
+}
+
+run_collector_verification_fixture <- function(strict) {
+  bash <- Sys.which("bash")
+  testthat::skip_if(!nzchar(bash), "bash is unavailable")
+  root <- tempfile("collector-fixture-")
+  dir.create(file.path(root, "hpc", "lib"), recursive = TRUE)
+  writeLines(":", file.path(root, "hpc", "lib", "load_atlas_environment.sh"))
+  runner <- tempfile(fileext = ".sh")
+  collector <- file.path(repo_root, "hpc", "atlas_hysplit_array_collect.sbatch")
+  lines <- c(
+    "#!/bin/bash",
+    "Rscript() {",
+    "  if [[ \"$1\" == -e ]]; then printf '%s' \"$TEST_COLLECTION_ROOT\"; return 0; fi",
+    "  if [[ \"$1\" == scripts/verify_manifest_pipeline_completion.R ]]; then echo 'historical run incomplete'; return 7; fi",
+    "  return 0",
+    "}",
+    paste0("export REPO_DIR=", slurm_bash_literal(root)),
+    paste0("export TEST_COLLECTION_ROOT=", slurm_bash_literal(root)),
+    "export CONFIG=config/test.yml MANIFEST=manifest.csv ARRAY_MAP=array.csv SUBMISSION_ID=fixture",
+    paste0("export EPIPLUME_STRICT_MANIFEST_VERIFICATION=", if (strict) "true" else "false"),
+    paste0("source ", slurm_bash_literal(collector))
+  )
+  writeLines(lines, runner)
+  output <- suppressWarnings(system2(bash, runner, stdout = TRUE, stderr = TRUE))
+  status <- attr(output, "status")
+  if (is.null(status)) status <- 0L
+  list(status = status, output = output,
+       log = file.path(root, "slurm_array", "collections", "fixture", "final_verification.log"))
+}
+
+testthat::test_that("whole-manifest verification warns without failing a successful collector", {
+  result <- run_collector_verification_fixture(strict = FALSE)
+  testthat::expect_equal(result$status, 0L, info = paste(result$output, collapse = "\n"))
+  testthat::expect_true(any(grepl("WARNING: whole-manifest verification is incomplete", result$output, fixed = TRUE)))
+  testthat::expect_true(file.exists(result$log))
+  testthat::expect_match(readLines(result$log), "historical run incomplete")
+})
+
+testthat::test_that("strict whole-manifest verification remains available", {
+  result <- run_collector_verification_fixture(strict = TRUE)
+  testthat::expect_equal(result$status, 7L, info = paste(result$output, collapse = "\n"))
 })

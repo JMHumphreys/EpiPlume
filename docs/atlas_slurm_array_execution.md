@@ -127,3 +127,5 @@ tail -f <scenario-root>/slurm_array/logs/collect_COLLECTOR_JOB_ID.out
 The submitted-job record is written to `<scenario-root>/slurm_array/collections/<submission_id>_submitted_jobs.txt`. Collection diagnostics are under `<scenario-root>/slurm_array/collections/<submission_id>/`.
 
 The collector returns nonzero for failed, missing, or invalid shards, while retaining valid durable results. Preserve all failed historical submissions, maps, shards, logs, and collection reports. Correct the cause and create a new submission for only the inspected affected run; never overwrite or delete the earlier evidence.
+
+Whole-manifest verification is written to `final_verification.log` as an informational check. An incomplete historical run outside the submitted array produces a warning but does not make an otherwise successful collector fail. Set `EPIPLUME_STRICT_MANIFEST_VERIFICATION=true` before submission only when the collector should require completion of the entire configured manifest.
