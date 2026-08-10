@@ -169,6 +169,35 @@ testthat::test_that("postprocessing worker never executes HYSPLIT", {
   testthat::expect_identical(result$post_state, "completed")
 })
 
+testthat::test_that("receptor-failed runs resume extraction without another HYSPLIT attempt", {
+  root <- tempfile("receptor-resume-root-"); cfg <- execution_cfg(); cfg$outputs$root_directory <- root; cfg$hysplit$run_root_directory <- file.path(root, "runs")
+  row <- make_manifest_row(); row$run_directory <- file.path(cfg$hysplit$run_root_directory, row$run_id); dir.create(row$run_directory, recursive = TRUE)
+  metadata <- durable_completed_metadata(row$run_directory, row$run_id); metadata$hysplit_attempt_count <- 1L; saveRDS(metadata, file.path(row$run_directory, "run_metadata.rds"))
+  dir.create(file.path(row$run_directory, "parsed")); saveRDS(list(marker = TRUE), file.path(row$run_directory, "parsed", "parsed_plume.rds"))
+  readiness <- data.frame(run_id = row$run_id, meteorology_ready = TRUE)
+  states <- classify_manifest_execution_state(row, cfg, readiness)
+  testthat::expect_identical(states$execution_state, "receptor_failed")
+  withr::local_envvar(EPIPLUME_REPOSITORY_COMMIT = paste(rep("a", 40), collapse = ""))
+  map <- with_fake_array_states(states, build_slurm_array_run_map(row, cfg, postprocess_only = TRUE))
+  testthat::expect_identical(map$action, "resume_postprocessing")
+  receptor_attempted <- FALSE
+  receptor_fake <- function(parsed, facilities, cfg, write_outputs, overwrite, refresh_run_index) {
+    receptor_attempted <<- TRUE; dir.create(file.path(row$run_directory, "receptors")); utils::write.csv(data.frame(x = 1), file.path(row$run_directory, "receptors", "source_receptor_exchange.csv"), row.names = FALSE); list()
+  }
+  result <- run_slurm_array_task(map, row, cfg, "RESUME", tempfile("resume-shards-"), authorize_execution = TRUE,
+    core_fun = function(...) stop("HYSPLIT must not rerun"), facilities = data.frame(),
+    parse_fun = function(...) stop("parsed output must be reused"), receptor_fun = receptor_fake)
+  testthat::expect_false(result$execution_attempted)
+  testthat::expect_equal(result$hysplit_attempt_count_before, 1L)
+  testthat::expect_equal(result$hysplit_attempt_count_after, 1L)
+  testthat::expect_true(receptor_attempted)
+  testthat::expect_identical(result$post_state, "completed")
+  testthat::expect_identical(classify_manifest_execution_state(row, cfg, readiness)$execution_state, "completed")
+  dir.create(file.path(root, "inputs")); dir.create(file.path(root, "manifests")); row$source_facility_id <- row$source_id; row$release_datetime_utc <- as.character(row$release_start)
+  utils::write.csv(row, file.path(root, "inputs", "run_manifest.csv"), row.names = FALSE); utils::write.csv(data.frame(run_id = row$run_id, shard_id = 1L), file.path(root, "manifests", "shard_manifest.csv"), row.names = FALSE)
+  testthat::expect_identical(inventory_demo_runs(root)$execution_status, "completed_valid")
+})
+
 testthat::test_that("array scripts preserve ownership boundaries", {
   worker <- readLines(file.path(repo_root, "scripts", "run_hysplit_slurm_array_task.R"))
   task <- readLines(file.path(repo_root, "R", "run_slurm_array_task.R"))

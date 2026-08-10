@@ -6,6 +6,19 @@ testthat::test_that("facility and observation validation rejects malformed recor
   testthat::expect_error(validate_observations(observations, facilities), "Unknown facility_id")
 })
 
+testthat::test_that("facility configuration requires a scalar intercept metric", {
+  config <- yaml::read_yaml(file.path(repo_root, "config", "facility_exchange_demo.yml"))
+  check <- function(value, remove = FALSE) {
+    candidate <- config
+    if (remove) candidate$exposure$intercept_metric <- NULL else candidate$exposure$intercept_metric <- value
+    path <- tempfile(fileext = ".yml"); yaml::write_yaml(candidate, path)
+    read_facility_exchange_config(path)
+  }
+  testthat::expect_error(check(NULL, remove = TRUE), "intercept_metric must be a nonempty")
+  testthat::expect_error(check(""), "intercept_metric must be a nonempty")
+  testthat::expect_identical(check("particle_count")$exposure$intercept_metric, "particle_count")
+})
+
 testthat::test_that("synthetic facilities and observations are reproducible", {
   a <- simulate_facility_network(test_cfg)
   b <- simulate_facility_network(test_cfg)

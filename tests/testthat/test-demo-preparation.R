@@ -3,6 +3,7 @@ testthat::test_that("tracked synthetic demo validates without execution", {
   f <- read_facility_inventory(cfg$.facilities_file); s <- read_release_schedule(cfg$.release_schedule_file, f, cfg); m <- build_demo_run_manifest(f, s, cfg, tempfile())
   testthat::expect_equal(nrow(f), 5); testthat::expect_equal(nrow(s), 4); testthat::expect_equal(nrow(m), 4)
   testthat::expect_true(all(c("run_id", "source_id", "release_start", "run_directory") %in% names(m)))
+  testthat::expect_identical(demo_execution_config(cfg, tempfile())$exposure$intercept_metric, "particle_count")
 })
 
 testthat::test_that("dry-run preparation writes normalized, provenance, meteorology, and shard files", {
@@ -13,4 +14,27 @@ testthat::test_that("dry-run preparation writes normalized, provenance, meteorol
   expected <- c("inputs/facilities.csv", "inputs/release_schedule.csv", "inputs/config.yml", "inputs/run_manifest.csv", "meteorology/meteorology_inventory.csv", "manifests/shard_manifest.csv", "provenance/preparation_provenance.yml", "combined/run_audit.csv")
   testthat::expect_true(all(file.exists(file.path(result$run_root, expected))))
   testthat::expect_false(any(file.exists(file.path(result$run_root, "runs", result$run_id %||% character()))))
+})
+
+testthat::test_that("demo execution config supports existing receptor extraction after parsing", {
+  demo <- read_demo_config(file.path(repo_root, "demo", "user_configurable", "demo.yml"), repo_root)
+  cfg <- demo_execution_config(demo, tempfile("demo-receptor-root-"))
+  parsed <- readRDS(file.path(repo_root, "tests", "testthat", "fixtures", "completed_parsed_plume.rds")); parsed$parsing_metadata$run_directory <- tempfile("demo-receptor-run-")
+  facilities <- utils::read.csv(file.path(repo_root, "tests", "testthat", "fixtures", "receptor_facilities.csv"), stringsAsFactors = FALSE)
+  extracted <- extract_facility_receptors_from_plume(parsed, facilities, cfg, write_outputs = TRUE, refresh_run_index = FALSE)
+  output <- file.path(parsed$parsing_metadata$run_directory, "receptors", "source_receptor_exchange.csv")
+  testthat::expect_true(file.exists(output))
+  testthat::expect_identical(extracted$extraction_metadata$intercept_metric, "particle_count")
+  testthat::expect_equal(extracted$extraction_metadata$intercept_threshold, 1)
+  testthat::expect_equal(extracted$extraction_metadata$minimum_intercept_hours, 1)
+  testthat::expect_false(parsed$parsing_metadata$source_id %in% extracted$exchange_table$receptor_id)
+  testthat::expect_true(any(extracted$exchange_table$intercept_reason == "outside_evaluation_distance"))
+  testthat::expect_true(any(extracted$exchange_table$intercept_reason == "no_modeled_exposure"))
+  testthat::expect_true(all(is.na(extracted$exchange_table$particle_count_cumulative[!extracted$exchange_table$within_evaluation_distance])))
+})
+
+testthat::test_that("Atlas wrapper uses an escape-free R source-file pattern", {
+  wrapper <- paste(readLines(file.path(repo_root, "hpc", "submit_user_configurable_demo.sh"), warn = FALSE), collapse = "\n")
+  testthat::expect_true(grepl("pattern='[.]R$'", wrapper, fixed = TRUE))
+  testthat::expect_false(grepl("pattern='\\\\.R$'", wrapper, fixed = TRUE))
 })

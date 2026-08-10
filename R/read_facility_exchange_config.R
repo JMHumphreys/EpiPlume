@@ -35,6 +35,7 @@ read_facility_exchange_config <- function(path = "config/facility_exchange_demo.
   positive(cfg$domain$raster_resolution_m, "domain.raster_resolution_m")
   positive(cfg$exposure$receptor_buffer_m, "exposure.receptor_buffer_m")
   if (!cfg$exposure$sampling_method %in% c("point", "buffer")) stop("exposure.sampling_method must be `point` or `buffer`.", call. = FALSE)
+  if (is.null(cfg$exposure$intercept_metric) || !is.character(cfg$exposure$intercept_metric) || length(cfg$exposure$intercept_metric) != 1L || is.na(cfg$exposure$intercept_metric) || !nzchar(cfg$exposure$intercept_metric)) stop("exposure.intercept_metric must be a nonempty character value.", call. = FALSE)
   nonnegative(cfg$exposure$intercept_threshold, "exposure.intercept_threshold")
   positive(cfg$exposure$minimum_intercept_hours, "exposure.minimum_intercept_hours")
   if (!identical(cfg$exposure$cumulative_method, "sum")) stop("exposure.cumulative_method must be `sum`.", call. = FALSE)

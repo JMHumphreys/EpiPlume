@@ -10,21 +10,32 @@ inventory_demo_runs <- function(run_root) {
   manifest <- utils::read.csv(p$manifest, stringsAsFactors = FALSE); shards <- if (file.exists(p$shards)) utils::read.csv(p$shards, stringsAsFactors = FALSE) else data.frame(run_id = manifest$run_id, shard_id = NA_integer_)
   ledger_path <- file.path(p$root, "execution", "manifest_execution_ledger.rds")
   ledger <- if (file.exists(ledger_path)) tryCatch(readRDS(ledger_path), error = function(e) NULL) else NULL
+  scalar <- function(x, default = NA) {
+    if (is.null(x) || length(x) == 0L) return(default)
+    while (is.list(x)) {
+      if (length(x) == 0L || is.null(x[[1L]])) return(default)
+      x <- x[[1L]]
+    }
+    if (length(x) == 0L) default else x[[1L]]
+  }
   one <- function(i) {
-    row <- manifest[i, , drop = FALSE]; dir <- row$run_directory
+    row <- manifest[i, , drop = FALSE]; row_value <- function(name, default = NA) if (name %in% names(row)) scalar(row[[name]], default) else default
+    dir <- as.character(row_value("run_directory", ""))
     meta_path <- file.path(dir, "run_metadata.rds"); raw_candidates <- c(file.path(dir, "splitr_work"), file.path(dir, "output")); raw_dirs <- raw_candidates[dir.exists(raw_candidates)]; raw_files <- if (length(raw_dirs)) unlist(lapply(raw_dirs, list.files, full.names = TRUE, recursive = TRUE), use.names = FALSE) else character()
     raw_files <- raw_files[file.exists(raw_files) & !dir.exists(raw_files)]; raw_bytes <- if (length(raw_files)) sum(file.info(raw_files)$size, na.rm = TRUE) else 0
     parsed_path <- file.path(dir, "parsed", "parsed_plume.rds"); receptor_path <- file.path(dir, "receptors", "source_receptor_exchange.csv")
     meta <- if (file.exists(meta_path)) tryCatch(readRDS(meta_path), error = identity) else NULL
     meta_error <- inherits(meta, "error"); completed <- is.list(meta) && identical(meta$status, "completed")
     valid <- FALSE; validation_error <- NA_character_
-    if (completed) { v <- tryCatch(validate_completed_hysplit_metadata(meta, dir), error = identity); valid <- is.list(v) && isTRUE(v$valid); if (!valid) validation_error <- if (inherits(v, "error")) conditionMessage(v) else v$error_message }
-    parsed_rows <- if (file.exists(parsed_path)) tryCatch(nrow(readRDS(parsed_path)), error = function(e) NA_integer_) else NA_integer_
-    receptor_rows <- if (file.exists(receptor_path)) tryCatch(nrow(utils::read.csv(receptor_path)), error = function(e) NA_integer_) else NA_integer_
+    if (completed) { v <- tryCatch(validate_completed_hysplit_metadata(meta, dir), error = identity); valid <- is.list(v) && isTRUE(v$valid); if (!valid) validation_error <- scalar(if (inherits(v, "error")) conditionMessage(v) else v$error_message, "Completed metadata failed validation.") }
+    parsed_rows <- if (file.exists(parsed_path)) tryCatch(scalar(nrow(readRDS(parsed_path)), NA_integer_), error = function(e) NA_integer_) else NA_integer_
+    receptor_rows <- if (file.exists(receptor_path)) tryCatch(scalar(nrow(utils::read.csv(receptor_path)), NA_integer_), error = function(e) NA_integer_) else NA_integer_
     execution_status <- if (dir.exists(file.path(dir, ".execution.lock"))) "in_progress" else if (meta_error) "execution_failed" else if (is.list(meta) && identical(meta$status, "failed")) "execution_failed" else if (completed && !valid) "completed_invalid" else if (completed && !file.exists(parsed_path)) "parse_failed" else if (completed && file.exists(parsed_path) && !file.exists(receptor_path)) "receptor_failed" else if (completed && valid) "completed_valid" else if (dir.exists(dir) && length(list.files(dir, all.files = TRUE, no.. = TRUE))) "missing_output" else "not_started"
-    lrow <- if (!is.null(ledger) && row$run_id %in% ledger$run_id) ledger[match(row$run_id, ledger$run_id), , drop = FALSE] else NULL
-    val <- function(name, default = NA) if (!is.null(lrow) && name %in% names(lrow)) lrow[[name]][1] else default
-    data.frame(run_id = row$run_id, source_facility_id = row$source_facility_id, release_datetime_utc = row$release_datetime_utc, shard_id = shards$shard_id[match(row$run_id, shards$run_id)], array_job_id = val("array_job_id"), array_task_id = val("array_task_id"), execution_status = execution_status, attempt_count = val("attempt_count", 0L), exit_code = val("exit_code"), started_at = as.character(val("last_attempt_started")), finished_at = as.character(val("last_attempt_finished")), elapsed_seconds = as.numeric(val("elapsed_seconds_total", NA_real_)), raw_output_exists = length(raw_files) > 0, raw_output_bytes = raw_bytes, parsed_output_exists = file.exists(parsed_path), parsed_row_count = parsed_rows, receptor_output_exists = file.exists(receptor_path), receptor_row_count = receptor_rows, validation_status = if (valid) "valid" else if (completed) "invalid" else "not_applicable", error_message = if (meta_error) conditionMessage(meta) else if (!is.na(validation_error)) validation_error else as.character(val("last_error")), stringsAsFactors = FALSE)
+    run_id <- as.character(row_value("run_id", "")); lrow <- if (!is.null(ledger) && "run_id" %in% names(ledger) && run_id %in% ledger$run_id) ledger[match(run_id, ledger$run_id), , drop = FALSE] else NULL
+    val <- function(name, default = NA) if (is.null(lrow) || !name %in% names(lrow)) default else scalar(lrow[[name]], default)
+    shard_id <- if (all(c("run_id", "shard_id") %in% names(shards))) scalar(shards$shard_id[match(run_id, shards$run_id)], NA_integer_) else NA_integer_
+    error_message <- if (meta_error) conditionMessage(meta) else if (!is.na(validation_error)) validation_error else as.character(val("last_error", NA_character_))
+    data.frame(run_id = run_id, source_facility_id = as.character(row_value("source_facility_id", NA_character_)), release_datetime_utc = as.character(row_value("release_datetime_utc", NA_character_)), shard_id = shard_id, array_job_id = val("array_job_id"), array_task_id = val("array_task_id"), execution_status = execution_status, attempt_count = val("attempt_count", 0L), exit_code = val("exit_code"), started_at = as.character(val("last_attempt_started")), finished_at = as.character(val("last_attempt_finished")), elapsed_seconds = as.numeric(val("elapsed_seconds_total", NA_real_)), raw_output_exists = length(raw_files) > 0, raw_output_bytes = scalar(raw_bytes, 0), parsed_output_exists = file.exists(parsed_path), parsed_row_count = parsed_rows, receptor_output_exists = file.exists(receptor_path), receptor_row_count = receptor_rows, validation_status = if (valid) "valid" else if (completed) "invalid" else "not_applicable", error_message = error_message, stringsAsFactors = FALSE)
   }
   out <- do.call(rbind, lapply(seq_len(nrow(manifest)), one)); rownames(out) <- NULL; out
 }
