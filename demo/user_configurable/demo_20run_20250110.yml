@@ -1,0 +1,60 @@
+# EpiPlume 20-run Atlas integration test
+# Synthetic/fake barn locations; January 10, 2025 release starts.
+demo:
+  name: user_configurable_demo_20run_20250110
+  description: >
+    Twenty-run Atlas integration test using 20 synthetic/fake barn locations,
+    five spatially distributed source facilities, and four UTC release times on
+    2025-01-10. Coordinates are intentionally non-real but designed for
+    interpretable spatial diagnostics.
+  facilities_file: demo/user_configurable/facilities_20.csv
+  release_schedule_file: demo/user_configurable/release_schedule_20.csv
+  output_root: test_runs/user_configurable_demo_20run_20250110
+
+simulation:
+  direction: forward
+  duration_hours: 8
+  release_height_m: 10
+  particle_count: null
+  vertical_motion_method: null
+  release_duration_hours: 1
+  emission_rate: 1
+  meteorology_type: reanalysis
+
+receptors:
+  include_all_facilities: true
+  exclude_source_facility: true
+  evaluation_distance_km: 20
+  buffer_radius_m: 1000
+  binary_intercept_particle_threshold: 1
+  binary_intercept_minimum_hours: 1
+
+meteorology:
+  allow_download: false
+  require_ready_before_submission: true
+  meteorology_directory: null # Set HYSPLIT_METEOROLOGY_DIRECTORY on Atlas.
+
+execution:
+  mode: slurm_array
+  array_shard_size: 20
+  resume_completed: true
+  retry_failed: true
+  overwrite_existing: false
+  dry_run: false
+  save_raw_output: true
+  save_parsed_particles: true
+  run_receptor_extraction: true
+  hysplit_install_directory: null # Set or use EPIPLUME_HYSPLIT_INSTALL_DIRECTORY.
+
+atlas:
+  account: disease_ecology
+  partition: null
+  walltime: "02:00:00"
+  memory: "8G"
+  cpus_per_task: 1
+  maximum_concurrent_tasks: 10
+
+reporting:
+  render_after_completion: false
+  output_formats:
+    - html

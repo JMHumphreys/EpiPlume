@@ -1,0 +1,21 @@
+source_facility_id,release_datetime_utc,duration_hours,release_height_m,particle_count,species_id,notes
+Barn06,2025-01-10T00:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn06,2025-01-10T06:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn06,2025-01-10T12:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn06,2025-01-10T18:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn24,2025-01-10T00:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn24,2025-01-10T06:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn24,2025-01-10T12:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn24,2025-01-10T18:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn22,2025-01-10T00:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn22,2025-01-10T06:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn22,2025-01-10T12:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn22,2025-01-10T18:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn10,2025-01-10T00:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn10,2025-01-10T06:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn10,2025-01-10T12:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn10,2025-01-10T18:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn05,2025-01-10T00:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn05,2025-01-10T06:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn05,2025-01-10T12:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
+Barn05,2025-01-10T18:00:00Z,,,,,20-run Atlas integration test; defaults inherited from YAML
