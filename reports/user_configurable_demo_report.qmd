@@ -3,6 +3,8 @@ title: "User-configurable EpiPlume demonstration diagnostic"
 format:
   html:
     toc: true
+    embed-resources: true
+    html-math-method: plain
 params:
   run_root: null
 execute:
@@ -11,12 +13,19 @@ execute:
 ---
 
 ```{r}
+audit_source <- if (file.exists("R/audit_demo_run.R")) "R/audit_demo_run.R" else "../R/audit_demo_run.R"
+source(audit_source)
 root <- params$run_root
 `%||%` <- function(x, y) if (is.null(x) || !length(x)) y else x
 if (is.null(root) || !dir.exists(root)) stop("A prepared `run_root` parameter is required.")
 root <- normalizePath(root, winslash = "/", mustWork = TRUE)
 read_csv <- function(path) if (file.exists(path)) utils::read.csv(path, stringsAsFactors = FALSE) else data.frame()
 read_yml <- function(path) if (file.exists(path) && requireNamespace("yaml", quietly = TRUE)) yaml::read_yaml(path) else list()
+finite_summary <- function(x) {
+  x <- suppressWarnings(as.numeric(x)); x <- x[is.finite(x)]
+  if (!length(x)) return("Runtime telemetry unavailable")
+  sprintf("n=%d; median=%.1f s; min=%.1f s; max=%.1f s", length(x), stats::median(x), min(x), max(x))
+}
 facilities <- read_csv(file.path(root, "inputs", "facilities.csv"))
 schedule <- read_csv(file.path(root, "inputs", "release_schedule.csv"))
 manifest <- read_csv(file.path(root, "inputs", "run_manifest.csv"))
@@ -24,17 +33,33 @@ met <- read_csv(file.path(root, "meteorology", "meteorology_inventory.csv"))
 audit <- read_csv(file.path(root, "combined", "run_audit.csv"))
 status <- read_csv(file.path(root, "combined", "run_status_summary.csv"))
 shards <- read_csv(file.path(root, "manifests", "shard_manifest.csv"))
+history <- inventory_demo_shard_history(root)
 prov <- read_yml(file.path(root, "provenance", "preparation_provenance.yml"))
 cfg <- read_yml(file.path(root, "inputs", "config.yml"))
-coverage_ok <- nrow(manifest) == nrow(audit) && !anyDuplicated(audit$run_id) && setequal(manifest$run_id, audit$run_id)
+coverage_ok <- nrow(manifest) == nrow(audit) && nrow(audit) > 0L && !anyDuplicated(audit$run_id) && setequal(manifest$run_id, audit$run_id)
+diagnostic <- demo_diagnostic_result(audit, coverage_ok)
 ```
 
-## Run and provenance
+## Run and preparation provenance
 
-Run: `r basename(root)`  
-EpiPlume version: `r prov$epiplume_version %||% "unavailable"`  
-Git commit: `r prov$git_commit_sha %||% "unavailable"`  
+Run: `r basename(root)`<br>
+EpiPlume version: `r prov$epiplume_version %||% "unavailable"`<br>
+Preparation commit: `r prov$git_commit_sha %||% "unavailable"`<br>
 Prepared UTC: `r prov$prepared_at_utc %||% "unavailable"`
+
+## Execution history
+
+Preparation provenance is retained separately from later execution and post-processing attempts.
+
+```{r}
+if (!nrow(history)) {
+  cat("No durable SLURM-array attempt history is available.")
+} else {
+  display <- history[, intersect(c("submission_id", "run_id", "array_job_id", "action", "repository_commit", "execution_attempted", "hysplit_attempt_count_before", "hysplit_attempt_count_after", "elapsed_seconds", "post_state", "task_exit_status"), names(history)), drop = FALSE]
+  knitr::kable(display)
+  cat("\n\nHYSPLIT attempts by run are reported in the audit below. A `resume_postprocessing` action with `execution_attempted = FALSE` documents post-processing without another atmospheric-model execution.")
+}
+```
 
 ## Normalized configuration
 
@@ -47,18 +72,24 @@ cat(paste(capture.output(str(cfg, max.level = 3)), collapse = "\n"))
 There are `r nrow(facilities)` receptor facilities, `r length(unique(schedule$source_facility_id))` source facilities, and `r nrow(schedule)` requested releases.
 
 ```{r}
-if (nrow(facilities)) plot(facilities$longitude, facilities$latitude, pch = 19, xlab = "Longitude", ylab = "Latitude", main = "Synthetic/user-supplied facilities") else cat("No facilities available.")
+if (nrow(facilities) && all(c("longitude", "latitude", "facility_id") %in% names(facilities))) {
+  source_ids <- if ("source_facility_id" %in% names(manifest)) unique(as.character(manifest$source_facility_id)) else if ("source_id" %in% names(manifest)) unique(as.character(manifest$source_id)) else character()
+  is_source <- facilities$facility_id %in% source_ids
+  plot(facilities$longitude, facilities$latitude, pch = ifelse(is_source, 17, 21), bg = ifelse(is_source, "#d73027", "#74add1"), col = "#333333", cex = 1.2, xlab = "Longitude", ylab = "Latitude", main = "Facilities and atmospheric release sources")
+  text(facilities$longitude, facilities$latitude, labels = facilities$facility_id, pos = 3, cex = 0.75)
+  legend("topright", legend = c("Release source", "Receptor-only facility"), pch = c(17, 21), pt.bg = c("#d73027", "#74add1"), bty = "n")
+} else cat("Facility coordinates are unavailable.")
 ```
 
 ## Manifest and meteorology
 
-The immutable manifest contains `r nrow(manifest)` runs and `r length(unique(shards$shard_id))` shards.
+The immutable manifest contains `r nrow(manifest)` runs and `r if (nrow(shards)) length(unique(shards$shard_id)) else 0L` shards.
 
 ```{r}
 if (nrow(met)) knitr::kable(met[, intersect(c("required_filename", "required_by_n_runs", "exists", "size_bytes", "ready"), names(met)), drop = FALSE]) else cat("Meteorology inventory is unavailable.")
 ```
 
-## SLURM and run status
+## Run status
 
 ```{r}
 if (nrow(status)) knitr::kable(status) else cat("No status summary is available.")
@@ -71,18 +102,55 @@ incomplete <- if (nrow(audit)) audit[audit$execution_status != "completed_valid"
 if (nrow(incomplete)) knitr::kable(incomplete) else cat("No incomplete runs.")
 ```
 
-## Execution diagnostics
+## Execution and parsing diagnostics
 
 ```{r}
 if (nrow(audit)) {
-  cat("Elapsed seconds (completed records): ", paste(summary(audit$elapsed_seconds), collapse = "; "), "\n\n")
-  cat("Raw output bytes: ", sum(audit$raw_output_bytes, na.rm = TRUE), "\n\n")
-  cat("Parsed particle rows: ", sum(audit$parsed_row_count, na.rm = TRUE), "\n\n")
-  cat("Receptor rows: ", sum(audit$receptor_row_count, na.rm = TRUE), "\n")
+  cat("Completed and validated runs:", sum(audit$execution_status == "completed_valid"), "of", nrow(audit), "\n\n")
+  cat("HYSPLIT execution-attempt runtime:", finite_summary(audit$execution_elapsed_seconds), "\n\n")
+  cat("Resumed post-processing runtime:", finite_summary(audit$postprocessing_elapsed_seconds), "\n\n")
+  cat("Raw output bytes:", sum(audit$raw_output_bytes, na.rm = TRUE), "\n\n")
+  parsed_available <- audit$parsed_row_count[!is.na(audit$parsed_row_count)]
+  if (length(parsed_available)) cat("Standardized dispersion records:", sum(parsed_available), "across", length(parsed_available), "parsed runs\n\n") else cat("Standardized dispersion record count unavailable.\n\n")
+  receptor_available <- audit$receptor_row_count[!is.na(audit$receptor_row_count)]
+  if (length(receptor_available)) cat("Source-receptor records:", sum(receptor_available), "across", length(receptor_available), "runs\n") else cat("Receptor output counts unavailable.\n")
 } else cat("Execution audit is unavailable.")
 ```
 
-## Preliminary receptor exchange
+## Representative particle-count plume diagnostics
+
+Plots use saved `hourly_particle_count.tif` products only; HYSPLIT is never rerun. At most four completed runs are selected deterministically in manifest order. For each run, the displayed hour is the saved raster layer with the largest total particle count.
+
+```{r}
+completed_ids <- if (nrow(audit)) audit$run_id[audit$execution_status == "completed_valid"] else character()
+selected <- head(manifest[manifest$run_id %in% completed_ids, , drop = FALSE], 4L)
+plotted <- 0L
+if (nrow(selected) && requireNamespace("terra", quietly = TRUE)) {
+  for (i in seq_len(nrow(selected))) {
+    raster_path <- file.path(selected$run_directory[i], "parsed", "hourly_particle_count.tif")
+    if (!file.exists(raster_path)) next
+    r <- tryCatch(terra::rast(raster_path), error = function(e) NULL); if (is.null(r) || terra::nlyr(r) < 1L) next
+    totals <- tryCatch(as.numeric(terra::global(r, "sum", na.rm = TRUE)[, 1]), error = function(e) rep(NA_real_, terra::nlyr(r)))
+    layer <- if (any(is.finite(totals))) which.max(replace(totals, !is.finite(totals), -Inf)) else 1L
+    layer_meta <- read_csv(file.path(selected$run_directory[i], "parsed", "raster_layer_metadata.csv")); layer_meta <- layer_meta[layer_meta$value == "particle_count", , drop = FALSE]
+    hour <- if (nrow(layer_meta) >= layer) layer_meta$elapsed_hour_bin[layer] else layer - 1L
+    terra::plot(r[[layer]], main = paste0(selected$run_id[i], " — particle count, hour ", hour), axes = TRUE)
+    if (nrow(facilities) && all(c("longitude", "latitude") %in% names(facilities))) {
+      pts <- tryCatch(terra::project(terra::vect(facilities, geom = c("longitude", "latitude"), crs = "EPSG:4326"), terra::crs(r)), error = function(e) NULL)
+      if (!is.null(pts)) terra::points(pts, pch = 21, bg = "#74add1", col = "#333333", cex = 0.8)
+    }
+    source_id <- if ("source_facility_id" %in% names(selected)) as.character(selected$source_facility_id[i]) else as.character(selected$source_id[i]); source <- facilities[facilities$facility_id == source_id, , drop = FALSE]
+    if (nrow(source)) {
+      src <- tryCatch(terra::project(terra::vect(source, geom = c("longitude", "latitude"), crs = "EPSG:4326"), terra::crs(r)), error = function(e) NULL)
+      if (!is.null(src)) terra::points(src, pch = 17, col = "#d73027", cex = 1.4)
+    }
+    plotted <- plotted + 1L
+  }
+}
+if (!plotted) cat("No completed saved particle-count rasters are available for plotting.")
+```
+
+## Receptor exchange and continuous exposure
 
 ```{r}
 files <- list.files(file.path(root, "runs"), pattern = "source_receptor_exchange[.]csv$", recursive = TRUE, full.names = TRUE)
@@ -91,24 +159,39 @@ if (!nrow(exchange)) {
   cat("Receptor outputs are incomplete or absent. Missing output is not interpreted as zero exposure.")
 } else {
   intercept <- if ("intercept" %in% names(exchange)) as.logical(exchange$intercept) else if ("binary_intercept" %in% names(exchange)) as.logical(exchange$binary_intercept) else rep(NA, nrow(exchange))
+  n_intercepts <- sum(intercept %in% TRUE)
   cat("Directed source-receptor records:", nrow(exchange), "\n\n")
-  cat("Binary intercepts:", sum(intercept, na.rm = TRUE), "of", sum(!is.na(intercept)), "\n")
-  if (all(c("source_id", "receptor_id") %in% names(exchange))) {
+  cat("Binary intercepts:", n_intercepts, "of", sum(!is.na(intercept)), "\n\n")
+  if ("intercept_reason" %in% names(exchange)) {
+    cat("Outcome categories (zero modeled exposure, below-threshold exposure, outside-distance screening, and unavailable metrics remain distinct where present):\n\n")
+    print(knitr::kable(as.data.frame(table(outcome = exchange$intercept_reason, useNA = "ifany"))))
+  }
+  continuous <- intersect(c("particle_count_max", "particle_count_cumulative"), names(exchange))
+  if (length(continuous)) {
+    summaries <- do.call(rbind, lapply(continuous, function(metric) {
+      x <- suppressWarnings(as.numeric(exchange[[metric]])); available <- is.finite(x)
+      data.frame(metric = metric, available_pairs = sum(available), zero_pairs = sum(available & x == 0), nonzero_pairs = sum(available & x > 0), minimum = if (any(available)) min(x[available]) else NA_real_, median = if (any(available)) stats::median(x[available]) else NA_real_, maximum = if (any(available)) max(x[available]) else NA_real_)
+    }))
+    cat("\n\nContinuous particle-count exposure summaries:\n\n"); print(knitr::kable(summaries, digits = 3))
+  }
+  if (n_intercepts == 0L) {
+    cat("\n\n**No source–receptor pairs met the configured binary intercept criterion in these runs.**")
+  } else if (all(c("source_id", "receptor_id") %in% names(exchange))) {
     cat("\n\nOutgoing intercepts by source:\n\n"); print(knitr::kable(as.data.frame(table(source_id = exchange$source_id[intercept %in% TRUE]))))
     cat("\n\nIncoming intercepts by receptor:\n\n"); print(knitr::kable(as.data.frame(table(receptor_id = exchange$receptor_id[intercept %in% TRUE]))))
-    cat("\n\nExchange matrix / heatmap values:\n\n"); print(knitr::kable(as.data.frame.matrix(table(exchange$source_id[intercept %in% TRUE], exchange$receptor_id[intercept %in% TRUE]))))
-  }
-  if (all(c("source_longitude", "source_latitude", "receptor_longitude", "receptor_latitude") %in% names(exchange))) {
-    plot(facilities$longitude, facilities$latitude, pch = 19, xlab = "Longitude", ylab = "Latitude", main = "Detected source-receptor links")
-    hit <- which(intercept %in% TRUE)
-    if (length(hit)) segments(exchange$source_longitude[hit], exchange$source_latitude[hit], exchange$receptor_longitude[hit], exchange$receptor_latitude[hit], col = "#d73027")
+    matrix <- as.data.frame.matrix(table(exchange$source_id[intercept %in% TRUE], exchange$receptor_id[intercept %in% TRUE]))
+    cat("\n\nPositive-intercept source × receptor matrix:\n\n"); print(knitr::kable(matrix))
+    if (all(c("source_longitude", "source_latitude", "receptor_longitude", "receptor_latitude") %in% names(exchange))) {
+      plot(facilities$longitude, facilities$latitude, pch = 21, bg = "#74add1", xlab = "Longitude", ylab = "Latitude", main = "Detected source-receptor links")
+      hit <- which(intercept %in% TRUE); segments(exchange$source_longitude[hit], exchange$source_latitude[hit], exchange$receptor_longitude[hit], exchange$receptor_latitude[hit], col = "#d73027", lwd = 2)
+    }
   }
 }
 ```
 
 ## Diagnostic result and key files
 
-Manifest coverage: **`r if (coverage_ok) "PASS" else "FAIL"`**.  
-Overall diagnostic: **`r if (coverage_ok && !any(audit$execution_status %in% c("completed_invalid", "execution_failed"))) "PASS (execution may still be incomplete)" else "FAIL"`**.
+Manifest coverage: **`r if (coverage_ok) "PASS" else "FAIL"`**.<br>
+Overall diagnostic: **`r diagnostic`**.
 
 Key paths: `r paste(file.path(root, c("inputs/run_manifest.csv", "combined/run_audit.csv", "combined/run_status_summary.csv", "meteorology/meteorology_inventory.csv")), collapse = "; ")`
