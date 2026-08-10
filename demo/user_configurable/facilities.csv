@@ -1,0 +1,6 @@
+facility_id,facility_name,latitude,longitude,facility_type,status,event_datetime_utc,notes
+F001,Synthetic Facility 001,35.4676,-97.5164,poultry,outbreak,2020-05-01T00:00:00Z,PLACEHOLDER - replace with real facility data
+F002,Synthetic Facility 002,35.2226,-97.4395,poultry,negative,2020-05-01T00:00:00Z,PLACEHOLDER - replace with real facility data
+F003,Synthetic Facility 003,35.6528,-97.4781,poultry,unknown,,PLACEHOLDER - replace with real facility data
+F004,Synthetic Facility 004,35.3395,-97.4867,poultry,unknown,,PLACEHOLDER - replace with real facility data
+F005,Synthetic Facility 005,35.5514,-97.4075,poultry,unknown,,PLACEHOLDER - replace with real facility data

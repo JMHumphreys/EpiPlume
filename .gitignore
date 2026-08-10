@@ -59,6 +59,7 @@ secrets.yaml
 /VMSDIST
 /WARNING
 /tests/testthat/local/
+/test_runs/
 
 # Atlas machine-specific environment
 /config/atlas.env

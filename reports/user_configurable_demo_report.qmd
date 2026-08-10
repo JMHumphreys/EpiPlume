@@ -1,0 +1,114 @@
+---
+title: "User-configurable EpiPlume demonstration diagnostic"
+format:
+  html:
+    toc: true
+params:
+  run_root: null
+execute:
+  echo: false
+  warning: false
+---
+
+```{r}
+root <- params$run_root
+`%||%` <- function(x, y) if (is.null(x) || !length(x)) y else x
+if (is.null(root) || !dir.exists(root)) stop("A prepared `run_root` parameter is required.")
+root <- normalizePath(root, winslash = "/", mustWork = TRUE)
+read_csv <- function(path) if (file.exists(path)) utils::read.csv(path, stringsAsFactors = FALSE) else data.frame()
+read_yml <- function(path) if (file.exists(path) && requireNamespace("yaml", quietly = TRUE)) yaml::read_yaml(path) else list()
+facilities <- read_csv(file.path(root, "inputs", "facilities.csv"))
+schedule <- read_csv(file.path(root, "inputs", "release_schedule.csv"))
+manifest <- read_csv(file.path(root, "inputs", "run_manifest.csv"))
+met <- read_csv(file.path(root, "meteorology", "meteorology_inventory.csv"))
+audit <- read_csv(file.path(root, "combined", "run_audit.csv"))
+status <- read_csv(file.path(root, "combined", "run_status_summary.csv"))
+shards <- read_csv(file.path(root, "manifests", "shard_manifest.csv"))
+prov <- read_yml(file.path(root, "provenance", "preparation_provenance.yml"))
+cfg <- read_yml(file.path(root, "inputs", "config.yml"))
+coverage_ok <- nrow(manifest) == nrow(audit) && !anyDuplicated(audit$run_id) && setequal(manifest$run_id, audit$run_id)
+```
+
+## Run and provenance
+
+Run: `r basename(root)`  
+EpiPlume version: `r prov$epiplume_version %||% "unavailable"`  
+Git commit: `r prov$git_commit_sha %||% "unavailable"`  
+Prepared UTC: `r prov$prepared_at_utc %||% "unavailable"`
+
+## Normalized configuration
+
+```{r}
+cat(paste(capture.output(str(cfg, max.level = 3)), collapse = "\n"))
+```
+
+## Facilities and release schedule
+
+There are `r nrow(facilities)` receptor facilities, `r length(unique(schedule$source_facility_id))` source facilities, and `r nrow(schedule)` requested releases.
+
+```{r}
+if (nrow(facilities)) plot(facilities$longitude, facilities$latitude, pch = 19, xlab = "Longitude", ylab = "Latitude", main = "Synthetic/user-supplied facilities") else cat("No facilities available.")
+```
+
+## Manifest and meteorology
+
+The immutable manifest contains `r nrow(manifest)` runs and `r length(unique(shards$shard_id))` shards.
+
+```{r}
+if (nrow(met)) knitr::kable(met[, intersect(c("required_filename", "required_by_n_runs", "exists", "size_bytes", "ready"), names(met)), drop = FALSE]) else cat("Meteorology inventory is unavailable.")
+```
+
+## SLURM and run status
+
+```{r}
+if (nrow(status)) knitr::kable(status) else cat("No status summary is available.")
+```
+
+## Failed and incomplete runs
+
+```{r}
+incomplete <- if (nrow(audit)) audit[audit$execution_status != "completed_valid", intersect(c("run_id", "shard_id", "execution_status", "attempt_count", "error_message"), names(audit)), drop = FALSE] else data.frame()
+if (nrow(incomplete)) knitr::kable(incomplete) else cat("No incomplete runs.")
+```
+
+## Execution diagnostics
+
+```{r}
+if (nrow(audit)) {
+  cat("Elapsed seconds (completed records): ", paste(summary(audit$elapsed_seconds), collapse = "; "), "\n\n")
+  cat("Raw output bytes: ", sum(audit$raw_output_bytes, na.rm = TRUE), "\n\n")
+  cat("Parsed particle rows: ", sum(audit$parsed_row_count, na.rm = TRUE), "\n\n")
+  cat("Receptor rows: ", sum(audit$receptor_row_count, na.rm = TRUE), "\n")
+} else cat("Execution audit is unavailable.")
+```
+
+## Preliminary receptor exchange
+
+```{r}
+files <- list.files(file.path(root, "runs"), pattern = "source_receptor_exchange[.]csv$", recursive = TRUE, full.names = TRUE)
+exchange <- if (length(files)) do.call(rbind, lapply(files, read_csv)) else data.frame()
+if (!nrow(exchange)) {
+  cat("Receptor outputs are incomplete or absent. Missing output is not interpreted as zero exposure.")
+} else {
+  intercept <- if ("intercept" %in% names(exchange)) as.logical(exchange$intercept) else if ("binary_intercept" %in% names(exchange)) as.logical(exchange$binary_intercept) else rep(NA, nrow(exchange))
+  cat("Directed source-receptor records:", nrow(exchange), "\n\n")
+  cat("Binary intercepts:", sum(intercept, na.rm = TRUE), "of", sum(!is.na(intercept)), "\n")
+  if (all(c("source_id", "receptor_id") %in% names(exchange))) {
+    cat("\n\nOutgoing intercepts by source:\n\n"); print(knitr::kable(as.data.frame(table(source_id = exchange$source_id[intercept %in% TRUE]))))
+    cat("\n\nIncoming intercepts by receptor:\n\n"); print(knitr::kable(as.data.frame(table(receptor_id = exchange$receptor_id[intercept %in% TRUE]))))
+    cat("\n\nExchange matrix / heatmap values:\n\n"); print(knitr::kable(as.data.frame.matrix(table(exchange$source_id[intercept %in% TRUE], exchange$receptor_id[intercept %in% TRUE]))))
+  }
+  if (all(c("source_longitude", "source_latitude", "receptor_longitude", "receptor_latitude") %in% names(exchange))) {
+    plot(facilities$longitude, facilities$latitude, pch = 19, xlab = "Longitude", ylab = "Latitude", main = "Detected source-receptor links")
+    hit <- which(intercept %in% TRUE)
+    if (length(hit)) segments(exchange$source_longitude[hit], exchange$source_latitude[hit], exchange$receptor_longitude[hit], exchange$receptor_latitude[hit], col = "#d73027")
+  }
+}
+```
+
+## Diagnostic result and key files
+
+Manifest coverage: **`r if (coverage_ok) "PASS" else "FAIL"`**.  
+Overall diagnostic: **`r if (coverage_ok && !any(audit$execution_status %in% c("completed_invalid", "execution_failed"))) "PASS (execution may still be incomplete)" else "FAIL"`**.
+
+Key paths: `r paste(file.path(root, c("inputs/run_manifest.csv", "combined/run_audit.csv", "combined/run_status_summary.csv", "meteorology/meteorology_inventory.csv")), collapse = "; ")`

@@ -1,0 +1,5 @@
+source_facility_id,release_datetime_utc,duration_hours,release_height_m,particle_count,species_id,notes
+F001,2020-05-01T00:00:00Z,,,,,PLACEHOLDER - replace with intended source and release time
+F001,2020-05-01T06:00:00Z,,,,,PLACEHOLDER - replace with intended source and release time
+F002,2020-05-01T00:00:00Z,,,,,PLACEHOLDER - replace with intended source and release time
+F002,2020-05-01T06:00:00Z,12,15,,,PLACEHOLDER - example run-level overrides

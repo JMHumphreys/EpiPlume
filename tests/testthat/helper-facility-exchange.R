@@ -1,4 +1,6 @@
 function_files <- c(
+  "read_demo_inputs.R", "validate_demo_inputs.R", "build_demo_manifest.R",
+  "audit_demo_run.R", "prepare_demo_run.R",
   "validate_facilities.R", "validate_observations.R",
   "read_facility_exchange_config.R", "simulate_facility_network.R",
   "simulate_facility_observations.R", "build_candidate_pairs.R",
@@ -53,6 +55,10 @@ make_manifest_row <- function(run_directory = tempfile("hysplit-run-")) {
 }
 invisible(lapply(file.path(repo_root, "R", function_files), source))
 test_cfg <- read_facility_exchange_config(file.path(repo_root, "config", "facility_exchange_demo.yml"))
+
+demo_facilities <- function() data.frame(facility_id = c("A1", "B2"), facility_name = c("Alpha", "Beta"), latitude = c(35, 36), longitude = c(-97, -98), event_datetime_utc = c("2020-05-01T00:00:00Z", ""), stringsAsFactors = FALSE)
+demo_schedule <- function() data.frame(source_facility_id = c("A1", "B2"), release_datetime_utc = c("2020-05-01T00:00:00Z", "2020-05-01T06:00:00+00:00"), duration_hours = c("", "12"), release_height_m = c("", "15"), particle_count = c("", "100"), stringsAsFactors = FALSE)
+demo_cfg <- function() list(demo = list(name = "test"), simulation = list(direction = "forward", duration_hours = 8, release_height_m = 10, particle_count = NULL, release_duration_hours = 1, emission_rate = 1, meteorology_type = "reanalysis"), receptors = list(evaluation_distance_km = 20))
 
 mock_valid_hysplit_dispersion <- function() data.frame(
   particle_i = c("1", "2"), hour = c(0, 1), lat = c(32.5, 32.51),

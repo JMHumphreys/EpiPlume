@@ -7,6 +7,10 @@
 
 Exploratory models of pathogen movement via aerosol, particle, and airborne dispersion.
 
+## User-configurable facility demonstration
+
+The [user-configurable demonstration](demo/user_configurable/README.md) accepts a facility inventory, a release schedule, and a YAML configuration, then validates and prepares the existing restartable HYSPLIT/Atlas workflow without submitting by default.
+
 <br clear="right" /> 
 
 ## Conceptual Overview

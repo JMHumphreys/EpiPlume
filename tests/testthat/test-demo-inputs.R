@@ -1,0 +1,25 @@
+demo_facilities <- function() data.frame(facility_id = c("A1", "B2"), facility_name = c("Alpha", "Beta"), latitude = c(35, 36), longitude = c(-97, -98), event_datetime_utc = c("2020-05-01T00:00:00Z", ""), stringsAsFactors = FALSE)
+demo_schedule <- function() data.frame(source_facility_id = c("A1", "B2"), release_datetime_utc = c("2020-05-01T00:00:00Z", "2020-05-01T06:00:00+00:00"), duration_hours = c("", "12"), release_height_m = c("", "15"), particle_count = c("", "100"), stringsAsFactors = FALSE)
+demo_cfg <- function() list(demo = list(name = "test"), simulation = list(direction = "forward", duration_hours = 8, release_height_m = 10, particle_count = NULL, release_duration_hours = 1, emission_rate = 1, meteorology_type = "reanalysis"), receptors = list(evaluation_distance_km = 20))
+
+testthat::test_that("facility validation is strict and informative", {
+  testthat::expect_equal(nrow(validate_facility_inventory(demo_facilities())), 2)
+  x <- demo_facilities(); x$facility_name <- NULL; testthat::expect_error(validate_facility_inventory(x), "missing required")
+  x <- demo_facilities(); x$facility_id[2] <- "A1"; testthat::expect_error(validate_facility_inventory(x), "Duplicate")
+  x <- demo_facilities(); x$latitude[1] <- NA; testthat::expect_error(validate_facility_inventory(x), "Invalid latitude")
+  x <- demo_facilities(); x$latitude[1] <- 91; testthat::expect_error(validate_facility_inventory(x), "Invalid latitude")
+  x <- demo_facilities(); x$longitude[1] <- -181; testthat::expect_error(validate_facility_inventory(x), "Invalid longitude")
+  x <- demo_facilities(); x$facility_id[1] <- "bad/id"; testthat::expect_error(validate_facility_inventory(x), "Unsafe")
+  x <- demo_facilities(); x$event_datetime_utc[1] <- "May 1"; testthat::expect_error(validate_facility_inventory(x), "explicit UTC")
+})
+
+testthat::test_that("release validation enforces UTC, uniqueness, membership, and inheritance", {
+  f <- validate_facility_inventory(demo_facilities()); cfg <- demo_cfg()
+  out <- validate_release_schedule(demo_schedule(), f, cfg); testthat::expect_equal(out$release_datetime_utc[2], "2020-05-01T06:00:00Z")
+  x <- demo_schedule(); x$source_facility_id[1] <- "NOPE"; testthat::expect_error(validate_release_schedule(x, f, cfg), "Unknown")
+  x <- demo_schedule(); x$release_datetime_utc[1] <- "2020-05-01 00:00:00"; testthat::expect_error(validate_release_schedule(x, f, cfg), "explicit UTC")
+  x <- demo_schedule(); x[2, 1:2] <- x[1, 1:2]; testthat::expect_error(validate_release_schedule(x, f, cfg), "Duplicate")
+  x <- demo_schedule(); x$duration_hours[1] <- "-1"; testthat::expect_error(validate_release_schedule(x, f, cfg), "Invalid duration")
+  x <- demo_schedule(); x$release_height_m[1] <- "0"; testthat::expect_error(validate_release_schedule(x, f, cfg), "Invalid release_height")
+  cfg$simulation$duration_hours <- NULL; testthat::expect_error(validate_release_schedule(demo_schedule(), f, cfg), "requires simulation.duration")
+})

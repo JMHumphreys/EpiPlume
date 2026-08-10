@@ -1,0 +1,59 @@
+# All relative paths resolve from the repository root.
+demo:
+  name: user_configurable_demo # Filesystem-safe scenario name.
+  description: > # Human-readable description recorded in provenance.
+    User-configurable EpiPlume demonstration using synthetic placeholder
+    facilities and release times. These records are not scientifically meaningful.
+  facilities_file: demo/user_configurable/facilities.csv # Facility inventory CSV.
+  release_schedule_file: demo/user_configurable/release_schedule.csv # Release CSV.
+  output_root: test_runs/user_configurable_demo # Prepared runs are created below here.
+
+# Shared defaults. Nonblank values in release_schedule.csv override the first
+# three applicable fields for that individual run.
+simulation:
+  direction: forward # Forward source-to-receptor transport only.
+  duration_hours: 8 # Default simulation duration; schedule override supported.
+  release_height_m: 10 # Default metres above ground; schedule override supported.
+  particle_count: null # Optional HYSPLIT parameter; schedule override supported.
+  vertical_motion_method: null # Optional HYSPLIT parameter inherited by all runs.
+  release_duration_hours: 1 # Shared duration of the source release.
+  emission_rate: 1 # Unit emission used by the existing execution adapter.
+  meteorology_type: reanalysis # Existing EpiPlume meteorology product family.
+
+receptors:
+  include_all_facilities: true # Use the complete inventory as receptors.
+  exclude_source_facility: true # Do not create source-to-self receptor records.
+  evaluation_distance_km: 20 # Maximum receptor evaluation distance.
+  buffer_radius_m: 1000 # Receptor sampling buffer radius.
+  binary_intercept_particle_threshold: 1 # Particle threshold for an intercept.
+  binary_intercept_minimum_hours: 1 # Hours meeting threshold required for intercept.
+
+meteorology:
+  allow_download: false # Never download unless explicitly changed by the user.
+  require_ready_before_submission: true # Block real submission when files are absent.
+  meteorology_directory: null # Set this or HYSPLIT_METEOROLOGY_DIRECTORY.
+
+execution:
+  mode: slurm_array # Current supported production execution mode.
+  array_shard_size: 20 # Runs assigned to each preparation shard.
+  resume_completed: true # Existing completed-valid runs are excluded from retries.
+  retry_failed: true # Failed runs may be selected explicitly for retry.
+  overwrite_existing: false # Never silently replace prepared inputs.
+  dry_run: false # CLI --dry-run may override this for preparation checks.
+  save_raw_output: true # Retain HYSPLIT artifacts.
+  save_parsed_particles: true # Run the existing parser after execution.
+  run_receptor_extraction: true # Run existing facility receptor extraction.
+  hysplit_install_directory: null # Set or use EPIPLUME_HYSPLIT_INSTALL_DIRECTORY.
+
+atlas:
+  account: disease_ecology # Atlas allocation; no username or personal path.
+  partition: null # Optional SLURM partition.
+  walltime: "02:00:00" # Per-array-task wall time.
+  memory: "8G" # Per-array-task memory.
+  cpus_per_task: 1 # Per-array-task CPUs.
+  maximum_concurrent_tasks: 10 # Array concurrency cap.
+
+reporting:
+  render_after_completion: false # Reporting is a separate, saved-output-only step.
+  output_formats: # Quarto formats requested by the reporting command.
+    - html
