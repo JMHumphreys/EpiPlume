@@ -68,6 +68,8 @@ source_ids <- if ("source_facility_id" %in% names(manifest)) unique(as.character
 coverage_ok <- nrow(manifest) == nrow(audit) && nrow(audit) > 0L && !anyDuplicated(audit$run_id) && setequal(manifest$run_id, audit$run_id)
 diagnostic <- demo_diagnostic_result(audit, coverage_ok)
 n_completed <- sum(column_or(audit, "execution_status", "unknown") == "completed_valid")
+selected_representative_runs <- demo_representative_runs(manifest, audit, 4L)
+representative_fig_height <- max(6, 5.2 * nrow(selected_representative_runs) + 1.2)
 parsed_total <- sum(column_or(audit, "parsed_row_count", NA_real_), na.rm = TRUE)
 parsed_available <- any(!is.na(column_or(audit, "parsed_row_count", NA_real_)))
 receptor_total <- if (nrow(exchange)) nrow(exchange) else sum(column_or(audit, "receptor_row_count", NA_real_), na.rm = TRUE)
@@ -180,10 +182,10 @@ The workflow produced `r if (parsed_available) pretty_number(parsed_total) else 
 ```{r}
 #| label: fig-representative-plumes
 #| fig-cap: "Representative plume diagnostics selected deterministically from up to the first four completed runs in manifest order. For each panel, the displayed hour has the largest raster-wide particle total in the saved particle-count output; HYSPLIT is not rerun. Red triangles identify the release source, blue circles identify receptor-only facilities, the shared fill legend reports particle count, and scale bars are in kilometers."
-#| fig-width: 11
-#| fig-height: 9
+#| fig-width: 10
+#| fig-height: !expr representative_fig_height
 #| output: asis
-selected <- demo_representative_runs(manifest, audit, 4L)
+selected <- selected_representative_runs
 plume_records <- list()
 if (nrow(selected) && requireNamespace("terra", quietly = TRUE)) {
   for (i in seq_len(nrow(selected))) {
@@ -219,7 +221,7 @@ if (length(plume_records)) {
   plume_plot <- ggplot2::ggplot(plume_data, ggplot2::aes(x, y, fill = particle_count)) +
     ggplot2::geom_raster(interpolate = FALSE) +
     ggplot2::geom_point(data = facility_data, ggplot2::aes(x, y, color = facility_type, shape = facility_type), inherit.aes = FALSE, size = 2) +
-    ggplot2::facet_wrap(~panel, ncol = min(2L, length(panel_levels))) +
+    ggplot2::facet_wrap(~panel, ncol = 1) +
     ggplot2::scale_fill_viridis_c(name = "Particle count", limits = c(0, common_max), na.value = "transparent", guide = ggplot2::guide_colorbar(direction = "horizontal", barwidth = grid::unit(3.5, "cm"), title.position = "top")) +
     ggplot2::scale_color_manual(values = c("Source facility" = "#d73027", "Receptor-only facility" = "#2878a8"), name = NULL) +
     ggplot2::scale_shape_manual(values = c("Source facility" = 17, "Receptor-only facility" = 21), name = NULL) +

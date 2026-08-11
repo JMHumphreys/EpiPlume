@@ -16,6 +16,22 @@ testthat::test_that("dry-run preparation writes normalized, provenance, meteorol
   testthat::expect_false(any(file.exists(file.path(result$run_root, "runs", result$run_id %||% character()))))
 })
 
+testthat::test_that("twenty-run dry-run planning creates four complete deterministic shards", {
+  cfg_path <- file.path(repo_root, "demo", "user_configurable", "demo_20run_20250110.yml")
+  cfg <- yaml::read_yaml(cfg_path); cfg$demo$output_root <- tempfile("demo-shard-output-"); cfg$execution$array_shard_size <- 5; cfg$execution$dry_run <- TRUE
+  local_cfg <- tempfile(fileext = ".yml"); yaml::write_yaml(cfg, local_cfg)
+  result <- testthat::expect_warning(prepare_demo_run(local_cfg, dry_run = TRUE), "dirty|HYSPLIT")
+  manifest <- utils::read.csv(file.path(result$run_root, "inputs", "run_manifest.csv"), stringsAsFactors = FALSE)
+  shards <- utils::read.csv(file.path(result$run_root, "manifests", "shard_manifest.csv"), stringsAsFactors = FALSE)
+  testthat::expect_equal(nrow(manifest), 20L)
+  testthat::expect_equal(as.integer(table(shards$shard_id)), rep(5L, 4L))
+  testthat::expect_equal(length(unique(shards$run_id)), 20L)
+  testthat::expect_equal(anyDuplicated(shards$run_id), 0L)
+  testthat::expect_setequal(shards$run_id, manifest$run_id)
+  testthat::expect_identical(as.character(shards$run_id), as.character(manifest$run_id))
+  testthat::expect_identical(as.integer(shards$array_index), seq_len(nrow(manifest)))
+})
+
 testthat::test_that("demo execution config supports existing receptor extraction after parsing", {
   demo <- read_demo_config(file.path(repo_root, "demo", "user_configurable", "demo.yml"), repo_root)
   cfg <- demo_execution_config(demo, tempfile("demo-receptor-root-"))
