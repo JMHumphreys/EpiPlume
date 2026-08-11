@@ -27,13 +27,15 @@ testthat::test_that("report chunks have stable cross-reference labels", {
   for (label in labels) testthat::expect_match(text, paste0("label: ", label), fixed = TRUE)
 })
 
-testthat::test_that("orientation map is offline and includes navigation aids", {
+testthat::test_that("report maps use offline ggplot graphics with explicit top legends", {
   text <- paste(readLines(file.path(repo_root, "reports", "user_configurable_demo_report.qmd"), warn = FALSE), collapse = "\n")
-  testthat::expect_match(text, 'maps::map("state"', fixed = TRUE)
+  testthat::expect_match(text, 'ggplot2::map_data("state")', fixed = TRUE)
   testthat::expect_match(text, 'requireNamespace("maps"', fixed = TRUE)
-  testthat::expect_match(text, "draw_north_scale", fixed = TRUE)
-  testthat::expect_match(text, "arrows(", fixed = TRUE)
-  testthat::expect_match(text, 'paste(target_km, "km")', fixed = TRUE)
+  testthat::expect_match(text, 'legend.position = "top"', fixed = TRUE)
+  testthat::expect_match(text, 'legend.box = "horizontal"', fixed = TRUE)
+  testthat::expect_match(text, "plot.margin = ggplot2::margin", fixed = TRUE)
+  testthat::expect_match(text, "ggspatial::annotation_scale", fixed = TRUE)
+  testthat::expect_match(text, 'unit_category = "metric"', fixed = TRUE)
   testthat::expect_false(grepl("https?://|download\\.file|tigris|tidycensus", text, ignore.case = TRUE))
 })
 
@@ -43,7 +45,41 @@ testthat::test_that("report wording covers complete, incomplete, zero, and posit
   testthat::expect_match(text, "requested runs are currently completed and validated", fixed = TRUE)
   testthat::expect_match(text, "No source-receptor pair met the binary intercept criterion", fixed = TRUE)
   testthat::expect_match(text, "n_intercepts > 0L", fixed = TRUE)
-  testthat::expect_match(text, "segments(exchange$source_longitude", fixed = TRUE)
+  testthat::expect_match(text, "ggplot2::geom_segment", fixed = TRUE)
+})
+
+testthat::test_that("representative plume composition remains deterministic and singular", {
+  manifest <- data.frame(run_id = paste0("R", 1:6), manifest_order = 1:6)
+  audit <- data.frame(run_id = c("R5", "R2", "R1", "R4", "R6", "R3"), execution_status = c("completed_valid", "not_started", rep("completed_valid", 4)))
+  selected <- demo_representative_runs(manifest, audit)
+  testthat::expect_identical(selected$run_id, c("R1", "R3", "R4", "R5"))
+  testthat::expect_identical(demo_representative_runs(manifest[1:3, ], audit, 4L)$run_id, c("R1", "R3"))
+  testthat::expect_equal(nrow(demo_representative_runs(manifest, transform(audit, execution_status = "not_started"))), 0L)
+  text <- paste(readLines(file.path(repo_root, "reports", "user_configurable_demo_report.qmd"), warn = FALSE), collapse = "\n")
+  testthat::expect_equal(length(gregexpr("label: fig-representative-plumes", text, fixed = TRUE)[[1]]), 1L)
+  testthat::expect_match(text, "ggplot2::facet_wrap", fixed = TRUE)
+  testthat::expect_match(text, "demo_representative_runs(manifest, audit, 4L)", fixed = TRUE)
+  testthat::expect_match(text, "largest raster-wide particle total", fixed = TRUE)
+})
+
+testthat::test_that("reader-facing narrative is emitted as Markdown", {
+  text <- paste(readLines(file.path(repo_root, "reports", "user_configurable_demo_report.qmd"), warn = FALSE), collapse = "\n")
+  testthat::expect_match(text, "asis_paragraph", fixed = TRUE)
+  testthat::expect_match(text, "knitr::asis_output", fixed = TRUE)
+  testthat::expect_false(grepl('cat\\(paste\\(design_sentence', text))
+  testthat::expect_false(grepl('cat\\(paste0\\("- ", findings', text))
+})
+
+testthat::test_that("report filenames are stable, safe, and run-specific", {
+  first <- tempfile("user_configurable_demo_20run_20250110__60ac7ef3885c-"); second <- tempfile("user_configurable_demo_20run_20250111__abc123-")
+  dir.create(first); dir.create(second)
+  first_name <- demo_report_filename(first)
+  testthat::expect_identical(first_name, demo_report_filename(first))
+  testthat::expect_false(identical(first_name, demo_report_filename(second)))
+  testthat::expect_match(first_name, "_report[.]html$")
+  testthat::expect_false(grepl("[^A-Za-z0-9._-]", first_name))
+  cli <- paste(readLines(file.path(repo_root, "scripts", "run_user_configurable_demo.R"), warn = FALSE), collapse = "\n")
+  testthat::expect_match(cli, 'cat("report=", path', fixed = TRUE)
 })
 
 testthat::test_that("parsed dispersion counts use the structured parsed object", {

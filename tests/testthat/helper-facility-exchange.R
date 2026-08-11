@@ -1,6 +1,6 @@
 function_files <- c(
   "read_demo_inputs.R", "validate_demo_inputs.R", "build_demo_manifest.R",
-  "audit_demo_run.R", "prepare_demo_run.R",
+  "audit_demo_run.R", "demo_report.R", "prepare_demo_run.R",
   "validate_facilities.R", "validate_observations.R",
   "read_facility_exchange_config.R", "simulate_facility_network.R",
   "simulate_facility_observations.R", "build_candidate_pairs.R",
